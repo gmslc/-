@@ -1,0 +1,63 @@
+import imaplib, email, os
+from datetime import datetime
+from email.header import decode_header
+
+# 连接到腾讯企业邮箱，其他邮箱调整括号里的参数
+conn = imaplib.IMAP4_SSL("imap.exmail.qq.com", 993)
+
+# 用户名、密码，登陆
+conn.login("账户", "密码")
+# 选定一个邮件文件夹
+lists = conn.list()
+conn.select("INBOX")  # 获取收件箱
+
+# 提取了文件夹中所有邮件的编号，search功能在本邮箱中没有实现……
+resp, mails = conn.search(None, 'ALL')
+
+# 提取了指定编号（最新一封）的邮件
+mails_list = mails[0].split()
+mails_list = list(reversed(mails_list))
+mail_nums = len(mails_list)
+for i in range(mail_nums):
+    resp, data = conn.fetch(mails_list[i], '(RFC822)')
+    emailbody = data[0][1]
+    mail = email.message_from_bytes(emailbody)
+    mail_datetime = mail.get("date")
+    GMT_FORMAT = "%a, %d %b %Y %H:%M:%S +0800"
+    mail_datetime = datetime.strptime(mail_datetime, GMT_FORMAT)
+    mail_date = mail_datetime.date()
+    # today = datetime.now().date()
+    # 指定日期
+    today = datetime.strptime("2019-06-25", "%Y-%m-%d").date()
+    # 如果满足所需附件的日期则保存
+    if mail_date == today:
+        fileName = '没有找到任何附件！'
+        # 获取邮件附件名称
+        for part in mail.walk():
+            if part.get_content_maintype() == 'multipart':
+                continue
+            if part.get('Content-Disposition') is None:
+                continue
+            fileName = part.get_filename()
+
+            # 如果文件名为纯数字、字母时不需要解码，否则需要解码
+            try:
+                fileName = decode_header(fileName)[0][0].decode(decode_header(fileName)[0][1])
+            except:
+                pass
+            # 如果获取到了文件，则将文件保存在制定的目录下
+            if fileName != '没有找到任何附件！':
+                filePath = os.path.join("D:\\附件", fileName)
+
+                if not os.path.isfile(filePath):
+                    fp = open(filePath, 'wb')
+                    fp.write(part.get_payload(decode=True))
+                    fp.close()
+                    print("附件已经下载，文件名为：" + fileName)
+                else:
+                    print("附件已经存在，文件名为：" + fileName)
+    else:
+        if mail_date < today:
+            break
+conn.close()
+conn.logout()
